@@ -9,6 +9,14 @@ An AI-powered developer agent that takes a Jira ticket, finds the relevant code 
 3. **Review the diff** in the built-in before/after viewer, then click **Apply Changes & Create PR** to commit and open a GitHub PR.
 4. **Iterate** — ask follow-up questions about the ticket or request code changes in plain English; the diff updates in-place.
 
+## MCP Architecture
+
+The Developer Agent is built on the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), which allows the agent to interact with external tools and data sources through a standardized interface.
+
+- **Decoupled Tools**: Tools like Jira integration are implemented as standalone MCP servers (e.g., `jira_mcp_server.py`).
+- **Dynamic Discovery**: The agent uses an MCP client (`client.py`) to connect to these servers, discover available tools at runtime, and provide them to the LLM.
+- **Generic Interface**: This architecture allows the agent to work with any MCP-compliant server without modification to its core logic.
+
 ## Stack
 
 | Layer | Tech |
@@ -28,6 +36,7 @@ indexer/        # Code parser, embedder, Pinecone pipeline
 frontend/       # React chat UI
 jira_mcp_server.py  # Jira MCP server (FastMCP)
 client.py       # MCP client wrapper
+mcp_agent.py    # Generic MCP agent implementation
 ```
 
 ## Setup
@@ -81,3 +90,14 @@ Open [http://localhost:5173](http://localhost:5173).
 3. Review the generated diff in the Unified or Before/After view.
 4. Click **Apply Changes & Create PR** — the agent commits the changes on a `fix/<ticket>` branch and opens a PR.
 5. Continue the conversation to refine the diff or ask about the ticket.
+
+## Generic MCP Agent
+
+In addition to the specialized developer workflow, you can run a generic MCP agent that provides a direct interface to any MCP server:
+
+1. **Configure the server**: Ensure the MCP server you want to use (e.g., `jira_mcp_server.py`) is available and configured in your `.env`.
+2. **Run the agent**:
+   ```bash
+   uv run mcp_agent.py --server-cmd "uv run jira_mcp_server.py"
+   ```
+3. **Interact**: The agent will connect to the server, list available tools, and wait for your instructions in the terminal.

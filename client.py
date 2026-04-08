@@ -1,38 +1,10 @@
 import asyncio
 import json
 import os
-import sys
-from pathlib import Path
-from dotenv import dotenv_values, load_dotenv
+from dotenv import load_dotenv
 load_dotenv()
 from langchain_mcp_adapters.client import MultiServerMCPClient
-_env = dotenv_values("/Users/sakib.kashi/Documents/sdlc/.env")  
-SERVER_SCRIPT = Path(__file__).parent / "jira_mcp_server.py"
-
-# ── Server config ──────────────────────────────────────────────────────────────
-#
-# Add more servers here as your stack grows (GitHub, Slack, etc.).
-# MultiServerMCPClient merges all their tools into one flat list automatically.
-
-MCP_SERVERS = {
-    "jira": {
-        "transport": "stdio",
-        "command":   sys.executable,
-        "args":      [str(SERVER_SCRIPT)],
-        "env": {
-            **os.environ,
-            **_env,
-            "JIRA_URL":  _env.get("JIRA_URL", ""),
-            "JIRA_EMAIL":     _env.get("JIRA_EMAIL", ""),
-            "JIRA_API_TOKEN": _env.get("JIRA_API_TOKEN", ""),
-        },
-    },
-    # "github": {
-    #     "transport": "stdio",
-    #     "command":   sys.executable,
-    #     "args":      ["github_mcp_server.py"],
-    # },
-}
+from mcp_config import MCP_SERVERS
 
 
 # ── Client wrapper ─────────────────────────────────────────────────────────────
