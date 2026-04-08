@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Cloned repos (can be large)
+repos/
+
+# Node / frontend
+node_modules/
+frontend/developer-agent-ui/dist/
+
+# Misc
+.DS_Store
+.last_indexed_commit
