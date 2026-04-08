@@ -1,45 +1,32 @@
 import asyncio
 import json
 import os
-import sys
-from pathlib import Path
-from dotenv import dotenv_values, load_dotenv
+from dotenv import load_dotenv
 load_dotenv()
 from langchain_mcp_adapters.client import MultiServerMCPClient
-_env = dotenv_values("/Users/sakib.kashi/Documents/sdlc/.env")  
-SERVER_SCRIPT = Path(__file__).parent / "jira_mcp_server.py"
 
-# ── Server config ──────────────────────────────────────────────────────────────
-#
-# Add more servers here as your stack grows (GitHub, Slack, etc.).
-# MultiServerMCPClient merges all their tools into one flat list automatically.
 
+# ── Configuration ─────────────────────────────────────────────────────────────
+
+# Configuration for MCP servers.
 MCP_SERVERS = {
     "jira": {
-        "transport": "stdio",
-        "command":   sys.executable,
-        "args":      [str(SERVER_SCRIPT)],
-        "env": {
-            **os.environ,
-            **_env,
-            "JIRA_URL":  _env.get("JIRA_URL", ""),
-            "JIRA_EMAIL":     _env.get("JIRA_EMAIL", ""),
-            "JIRA_API_TOKEN": _env.get("JIRA_API_TOKEN", ""),
-        },
+        "command": "python",
+        "args": ["jira_mcp_server.py"],
     },
-    # "github": {
-    #     "transport": "stdio",
-    #     "command":   sys.executable,
-    #     "args":      ["github_mcp_server.py"],
-    # },
+    "code": {
+        "command": "python",
+        "args": ["code_mcp_server.py"],
+    },
 }
 
 
 # ── Client wrapper ─────────────────────────────────────────────────────────────
 
-class JiraMCPClient:
+class UniversalMCPClient:
     """
     Wrapper around MultiServerMCPClient for langchain-mcp-adapters >= 0.1.0.
+    Manages multiple MCP server connections (e.g., Jira, Code, etc.).
 
     In 0.1.0 the async context manager was removed. Tools are fetched by
     calling `await client.get_tools()` directly — the library manages the
@@ -48,11 +35,11 @@ class JiraMCPClient:
     Two usage patterns:
 
     1. Direct call (scripts / FastAPI endpoints / LangGraph nodes):
-       client = JiraMCPClient()
+       client = UniversalMCPClient()
        issue  = await client.get_issue("PROJ-123")
 
     2. LangGraph agent:
-       client = JiraMCPClient()
+       client = UniversalMCPClient()
        tools  = await client.get_tools()
        agent  = create_react_agent(model, tools)
        result = await agent.ainvoke({...})
@@ -111,7 +98,7 @@ async def run_agent_demo(issue_key: str) -> None:
 
     print(f"\n── LangGraph agent demo  (ticket: {issue_key}) ──\n")
 
-    client = JiraMCPClient()
+    client = UniversalMCPClient()
     tools  = await client.get_tools()
     print(f"Tools loaded: {[t.name for t in tools]}\n")
 
@@ -162,7 +149,7 @@ def _pretty_print(issue: dict) -> None:
 
 async def run_direct_demo(issue_key: str) -> None:
     print(f"\n── Direct call demo  (ticket: {issue_key}) ──\n")
-    client = JiraMCPClient()
+    client = UniversalMCPClient()
     issue  = await client.get_issue(issue_key)
     _pretty_print(issue)
 
