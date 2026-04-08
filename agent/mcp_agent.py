@@ -1,77 +1,54 @@
 import asyncio
-import json
 import os
 import sys
-from typing import List, Dict, Any, Optional
 from contextlib import AsyncExitStack
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
-from langchain_core.tools import StructuredTool
 from langchain_core.messages import HumanMessage
-
+from langchain_mcp_adapters.tools import load_mcp_tools
 
 class MCPAgent:
-    def __init__(self, server_configs: List[Dict[str, Any]]):
-        """
-        Initialize the MCPAgent with a list of server configurations.
-        Each config should have 'command', 'args', and optionally 'env'.
-        """
-        self.server_configs = server_configs
+    def __init__(self):
         self.exit_stack = AsyncExitStack()
-        self.sessions: List[ClientSession] = []
-        self.tools: List[StructuredTool] = []
+        self.tools = []
         self.agent_executor = None
 
-    async def _connect_to_server(self, config: Dict[str, Any]):
-        """Connect to a single MCP server and retrieve its tools."""
-        server_params = StdioServerParameters(
-            command=config["command"],
-            args=config.get("args", []),
-            env={**os.environ, **config.get("env", {})}
-        )
-        
-        transport_ctx = stdio_client(server_params)
-        read, write = await self.exit_stack.enter_async_context(transport_ctx)
-        session = await self.exit_stack.enter_async_context(ClientSession(read, write))
-        
-        await session.initialize()
-        self.sessions.append(session)
-        
-        # List tools from the server
-        response = await session.list_tools()
-        
-        for mcp_tool in response.tools:
-            # Create a wrapper function for the MCP tool
-            def create_tool_func(s: ClientSession, name: str):
-                async def tool_func(**kwargs):
-                    result = await s.call_tool(name, arguments=kwargs)
-                    return result.content
-                return tool_func
-
-            # Convert MCP tool schema to LangChain StructuredTool
-            # Note: MCP uses JSON Schema for inputSchema
-            lc_tool = StructuredTool.from_function(
-                coroutine=create_tool_func(session, mcp_tool.name),
-                name=mcp_tool.name,
-                description=mcp_tool.description or f"Tool {mcp_tool.name} from MCP server",
-                # We pass the schema directly if possible, or let StructuredTool infer
-                # For simplicity in this generic implementation, we rely on the dynamic function
-            )
-            self.tools.append(lc_tool)
-
     async def initialize(self):
-        """Initialize connections to all servers and set up the agent."""
-        for config in self.server_configs:
+        """Initialize connections to MCP servers and set up the agent."""
+        # Determine the base directory (project root)
+        # agent/mcp_agent.py -> project_root/
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        server_configs = [
+            {
+                "name": "jira",
+                "command": sys.executable,
+                "args": [os.path.join(base_dir, "jira_mcp_server.py")]
+            },
+            {
+                "name": "codebase",
+                "command": sys.executable,
+                "args": [os.path.join(base_dir, "mcp_server.py")]
+            }
+        ]
+
+        for config in server_configs:
             try:
-                await self._connect_to_server(config)
+                # load_mcp_tools is an async context manager that yields a list of tools
+                server_tools = await self.exit_stack.enter_async_context(
+                    load_mcp_tools(
+                        config["command"],
+                        config["args"],
+                        env=os.environ.copy()
+                    )
+                )
+                self.tools.extend(server_tools)
             except Exception as e:
-                print(f"Failed to connect to server {config.get('command')}: {e}", file=sys.stderr)
+                print(f"Failed to connect to server {config['name']}: {e}", file=sys.stderr)
 
         if not self.tools:
-            print("Warning: No tools were loaded from MCP servers.")
+            raise RuntimeError("No tools were loaded from MCP servers. Check if servers are running correctly.")
 
         # Initialize the LLM and ReAct agent
         # Ensure OPENAI_API_KEY is set in environment
@@ -93,24 +70,9 @@ class MCPAgent:
         """Close all server connections."""
         await self.exit_stack.aclose()
 
-
 async def main():
     """CLI entry point for testing the MCPAgent."""
-    if len(sys.argv) < 2:
-        print("Usage: python mcp_agent.py <config_json_path> or provide a prompt directly")
-        # Default config for testing if none provided
-        configs = []
-    else:
-        # Try to load config from first arg if it's a file
-        config_path = sys.argv[1]
-        if os.path.exists(config_path):
-            with open(config_path, 'r') as f:
-                configs = json.load(f)
-        else:
-            print(f"Config file {config_path} not found. Using empty config.")
-            configs = []
-
-    agent = MCPAgent(configs)
+    agent = MCPAgent()
     try:
         await agent.initialize()
         print("MCP Agent initialized. Type 'exit' to quit.")
@@ -131,7 +93,6 @@ async def main():
                 print(f"Error: {e}")
     finally:
         await agent.cleanup()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
